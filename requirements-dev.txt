@@ -1,0 +1,13 @@
+# Development and testing dependencies
+
+# Core dependencies (same as production)
+Flask==3.0.0
+geoip2==4.7.0
+PyYAML==6.0.1
+requests==2.31.0
+gunicorn==21.2.0
+
+# Testing dependencies
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-mock==3.12.0

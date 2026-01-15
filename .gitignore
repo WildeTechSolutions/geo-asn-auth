@@ -1,0 +1,27 @@
+# User's custom configuration
+config.yaml
+
+# Blocklists cache and downloaded files
+blocklists/*.txt
+blocklists/*.time
+# But keep the README
+!blocklists/README.md
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

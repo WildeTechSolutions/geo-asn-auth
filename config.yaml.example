@@ -1,0 +1,74 @@
+# GeoBlock Service Configuration
+# Use EITHER whitelist OR blacklist for each category (not both)
+
+# Country Filtering
+# Use ISO 2-letter country codes
+countries:
+  mode: whitelist  # Options: whitelist, blacklist, disabled
+  whitelist:
+    - US  # United States
+    # - CA  # Canada
+    # - GB  # United Kingdom
+  blacklist: []
+    # - CN  # China
+    # - RU  # Russia
+    # - KP  # North Korea
+
+# ASN Filtering
+# Autonomous System Numbers for network/ISP blocking
+asn:
+  mode: blacklist  # Options: whitelist, blacklist, disabled
+  
+  # Whitelist: In "whitelist" mode, only these ASNs are allowed (strict)
+  #            In "blacklist" mode, these ASNs are exceptions to the blacklist
+  whitelist:
+    # - 212238  # Datacamp (ProtonVPN) - example trusted VPN exception
+    # - 7922    # Comcast Cable Communications
+    # - 20115   # Charter Communications
+  
+  # Optional: Fetch ASN lists from remote URLs (fetched at startup)
+  # Supports remote URLs and local file paths (file:///path or /path)
+  # Downloaded lists are cached to /blocklists for 24 hours
+  blacklist_urls:
+    # Datacenter ASN list (1277+ datacenter/hosting ASNs)
+    # - https://raw.githubusercontent.com/brianhama/bad-asn-list/refs/heads/master/only%20number.txt
+    # Local file examples (place files in ./blocklists/):
+    # - /blocklists/custom-asn-blacklist.txt
+    # - /blocklists/my-datacenter-asns.txt
+  whitelist_urls: []
+    # - https://example.com/trusted-asns.txt
+    # - file:///app/trusted-asns.txt
+  
+  # Manual ASN entries (combined with fetched lists)
+  blacklist:
+    # Cloud Providers (from CrowdSec bans)
+    - 16509   # AMAZON-02 (AWS)
+    - 8075    # MICROSOFT-CORP-MSN-AS-BLOCK (Azure)
+    - 14061   # DIGITALOCEAN-ASN
+    
+    # CDN / Security Services
+    - 13335   # Cloudflare
+    - 15169   # Google LLC
+    
+    # Censys Scanners (frequent in CrowdSec bans)
+    - 398324  # CENSYS-ARIN-01
+    - 398722  # CENSYS-ARIN-03
+    - 398705  # CENSYS-ARIN-02
+    
+    # Other suspicious ASNs from CrowdSec
+    - 202306  # Hostglobal.plus Ltd (UK - frequent probing)
+    - 135377  # UCLOUD INFORMATION TECHNOLOGY HK LIMITED
+    - 4837    # CHINA UNICOM China169 Backbone
+    - 18403   # FPT Telecom Company (Vietnam)
+    - 17665   # ONEOTT INTERTAINMENT LIMITED (India)
+    # - 212238  # Datacamp (ProtonVPN)
+    - 42821   # K&K Kommunikationssysteme GmbH (Germany)
+    - 680     # Verein zur Foerderung eines Deutschen Forschungsnetzes e.V.
+    - 149658  # Taherpur Online (Bangladesh)
+
+# Additional Options
+# These can also be overridden by environment variables
+settings:
+  allow_lan: true          # Allow private/LAN IPs (192.168.x.x, 10.x.x.x, etc.)
+  allow_unknown: true      # Allow if country/ASN cannot be determined
+  use_html_response: true  # Return HTML block page (false for JSON response)

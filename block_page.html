@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Access Denied</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 3rem 2rem;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        .icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: #1a202c;
+        }
+        .reason {
+            font-size: 1.1rem;
+            color: #4a5568;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+        .details {
+            background: #f7fafc;
+            border-left: 4px solid #667eea;
+            padding: 1rem;
+            margin: 1.5rem 0;
+            text-align: left;
+            border-radius: 4px;
+        }
+        .details p {
+            margin: 0.5rem 0;
+            font-size: 0.9rem;
+            color: #4a5568;
+        }
+        .details strong {
+            color: #2d3748;
+        }
+        .footer {
+            margin-top: 2rem;
+            font-size: 0.85rem;
+            color: #718096;
+        }
+        code {
+            background: #edf2f7;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🛡️</div>
+        <h1>Access Denied</h1>
+        <p class="reason">{{reason}}</p>
+        
+        <div class="details">
+            <p><strong>Your IP:</strong> <code>{{client_ip}}</code></p>
+            {{#country}}
+            <p><strong>Country:</strong> {{country}}</p>
+            {{/country}}
+            {{#asn}}
+            <p><strong>Network (ASN):</strong> {{asn}}</p>
+            {{/asn}}
+            <p><strong>Time:</strong> {{timestamp}}</p>
+        </div>
+        
+        <div class="footer">
+            <p>If you believe this is an error, please contact the site administrator.</p>
+            <p style="margin-top: 0.5rem;">Reference: <code>{{request_id}}</code></p>
+        </div>
+    </div>
+</body>
+</html>
