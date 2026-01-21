@@ -41,7 +41,21 @@ class Config:
         # Parse ASN configuration
         asn_config = self.raw_config.get('asn', {})
         self.asn_mode = asn_config.get('mode', 'disabled')
-        self.asn_whitelist = set(asn_config.get('whitelist', []))
+        
+        # Parse ASN whitelist (supports simple integers or objects with user-agent restrictions)
+        self.asn_whitelist = {}  # dict: {asn_number: [user_agent_patterns] or None}
+        for entry in asn_config.get('whitelist', []):
+            if isinstance(entry, int):
+                # Simple format: just the ASN number (no restrictions)
+                self.asn_whitelist[entry] = None
+            elif isinstance(entry, dict) and 'asn' in entry:
+                # Complex format: ASN with user-agent restrictions
+                asn = entry['asn']
+                user_agents = entry.get('user_agents', [])
+                self.asn_whitelist[asn] = user_agents if user_agents else None
+            else:
+                logger.warning(f"Invalid ASN whitelist entry: {entry}")
+        
         self.asn_blacklist = set(asn_config.get('blacklist', []))
         
         # Parse settings (with environment variable overrides)
@@ -167,7 +181,8 @@ class Config:
         logger.info(f"  IP mode: {self.ip_mode}")
         logger.info(f"  IP whitelist: {self.ip_whitelist}")
         logger.info(f"  IP blacklist: {self.ip_blacklist}")
-        logger.info(f"  ASN whitelist: {self.asn_whitelist}")
+        logger.info(f"  ASN whitelist: {len(self.asn_whitelist)} total, "
+                   f"{sum(1 for p in self.asn_whitelist.values() if p)} conditional")
         logger.info(f"  ASN blacklist: {self.asn_blacklist}")
         logger.info(f"  ALLOW_LAN: {self.allow_lan}")
         logger.info(f"  ALLOW_UNKNOWN: {self.allow_unknown}")

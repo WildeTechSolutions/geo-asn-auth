@@ -53,6 +53,7 @@ def health():
             "country_blacklist": config.country_blacklist,
             "asn_mode": config.asn_mode,
             "asn_whitelist_count": len(config.asn_whitelist),
+            "asn_whitelist_conditional_count": sum(1 for patterns in config.asn_whitelist.values() if patterns is not None),
             "asn_blacklist_count": len(config.asn_blacklist),
             "allow_lan": config.allow_lan,
             "allow_unknown": config.allow_unknown

@@ -3,7 +3,8 @@ Core verification logic for IP, country, and ASN-based blocking.
 """
 
 import logging
-from flask import jsonify
+import fnmatch
+from flask import jsonify, request
 from geoip2.errors import AddressNotFoundError
 from .utils import is_private_ip, get_client_ip, render_block_page
 
@@ -171,8 +172,29 @@ def _check_asn(client_ip, config):
         # Blacklist mode: block listed ASNs, but allow whitelisted exceptions
         elif config.asn_mode == 'blacklist':
             # Check whitelist first (exceptions to blacklist)
-            if config.asn_whitelist and asn_number in config.asn_whitelist:
-                logger.debug(f"Allowing IP {client_ip} from ASN {asn_number} (whitelisted exception)")
+            if asn_number in config.asn_whitelist:
+                user_agent_patterns = config.asn_whitelist[asn_number]
+                
+                # If no user-agent restrictions, allow immediately
+                if user_agent_patterns is None:
+                    logger.debug(f"Allowing IP {client_ip} from ASN {asn_number} (whitelisted exception)")
+                else:
+                    # Check if user-agent matches required patterns
+                    user_agent = request.headers.get('User-Agent', '')
+                    
+                    matched = any(fnmatch.fnmatch(user_agent, pattern) for pattern in user_agent_patterns)
+                    
+                    if matched:
+                        logger.info(f"Allowing IP {client_ip} from ASN {asn_number} (whitelisted with user-agent '{user_agent}')")
+                    else:
+                        logger.info(f"Blocked IP {client_ip} from ASN {asn_number} (whitelisted but user-agent '{user_agent}' doesn't match required patterns: {user_agent_patterns})")
+                        return render_block_page(
+                            f"Access from your network (AS{asn_number}) requires authorized application.",
+                            client_ip,
+                            asn=f"AS{asn_number} - {asn_org}",
+                            use_html_response=config.use_html_response,
+                            block_page_template=config.block_page_template
+                        )
             # Then check blacklist
             elif config.asn_blacklist and asn_number in config.asn_blacklist:
                 logger.info(f"Blocked IP {client_ip} from ASN {asn_number} (in blacklist)")
