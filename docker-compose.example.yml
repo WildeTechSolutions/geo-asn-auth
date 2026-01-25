@@ -1,42 +1,37 @@
-version: '3.8'
-
 services:
-  geoblock-service:
-    image: your-username/traefik-geoblock-forwardauth:latest
+  geo-asn-auth:
+    image: ghcr.io/wildetechsolutions/geo-asn-auth:latest
     # Or build locally:
     # build:
     #   context: .
     #   args:
     #     USER_UID: 1000  # Match your host user (run `id -u`)
     #     USER_GID: 1000  # Match your host group (run `id -g`)
-    container_name: geoblock-service
+    container_name: geo-asn-auth
     restart: unless-stopped
-    ports:
-      - "9876:9876"  # Expose for testing (remove in production if using Traefik)
     volumes:
-      # MaxMind database directory (required)
-      - /path/to/maxmind:/data:ro
-      
-      # Custom config (optional - uses bundled config.yaml.example if not provided)
-      # - ./config.yaml:/app/config.yaml:ro
-      
-      # Blocklists directory for caching and custom ASN lists
-      - ./blocklists:/blocklists
+      # Mount MaxMind databases (required) This can be a shared location for other Pangolin services
+      - ./config/maxmind:/data:ro
+      # Mount custom config (optional - uses bundled config.yaml.example if not provided)
+      # Create config.yaml from config.yaml.example and uncomment to customize:
+      - ./geoblock/config.yaml:/app/config.yaml:ro
+      # Mount blocklists directory for caching and custom ASN lists
+      - ./geoblock/blocklists:/blocklists
     environment:
-      # Service port (default: 9876)
+      # Service port
       - PORT=9876
       
-      # Config file path (default: /app/config.yaml)
+      # Config file path (inside container)
       - CONFIG_PATH=/app/config.yaml
       
       # Database paths (inside container)
       - COUNTRY_DB_PATH=/data/GeoLite2-Country.mmdb
       - ASN_DB_PATH=/data/GeoLite2-ASN.mmdb
       
-      # Optional: Override config.yaml settings via environment variables
+      # Optional overrides (uncomment to override config.yaml settings)
       # - ALLOW_LAN=true
       # - ALLOW_UNKNOWN=true
-      # - USE_HTML_RESPONSE=true
+      # - USE_HTML_RESPONSE=false  # Set to false for JSON responses instead of HTML
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9876/health')"]
       interval: 30s

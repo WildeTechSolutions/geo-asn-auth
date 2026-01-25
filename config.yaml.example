@@ -1,6 +1,22 @@
 # GeoBlock Service Configuration
 # Use EITHER whitelist OR blacklist for each category (not both)
 
+# IP Address Filtering
+# Direct IP-based allow/block before country/ASN checks
+ip:
+  mode: blacklist  # Options: whitelist, blacklist, disabled
+  
+  # Whitelist: In "whitelist" mode, only these IPs are allowed (other checks still apply)
+  #            In "blacklist" mode, these IPs bypass all other checks (early allow)
+  # whitelist: 
+    # - 169.150.254.37     # Trusted IP
+    # - 10.0.0.50    # Office IP
+  
+  # Blacklist: Always blocked regardless of country/ASN
+  blacklist: []
+    # - 192.0.2.1    # Known attacker
+    # - 198.51.100.5 # Suspicious IP
+
 # Country Filtering
 # Use ISO 2-letter country codes
 countries:
@@ -14,6 +30,34 @@ countries:
     # - RU  # Russia
     # - KP  # North Korea
 
+# User-Agent Filtering
+# Filter requests based on User-Agent header (substring matching)
+user_agent:
+  mode: blacklist  # Options: whitelist, blacklist, disabled
+  
+  # Optional: Fetch user-agent lists from remote URLs (fetched at startup)
+  # Supports remote URLs and local file paths
+  # Downloaded lists are cached to /blocklists with configurable cache_hours
+  blacklist_urls:
+    # Bad bot/crawler list (~4000 entries, substring matching)
+    - https://raw.githubusercontent.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker/refs/heads/master/_generator_lists/bad-user-agents.list
+  # whitelist_urls:
+    # - https://example.com/allowed-bots.txt
+  
+  # Manual user-agent entries (combined with fetched lists)
+  # NOTE: These are substring matches (case-insensitive)
+  # "PHPCrawl" will block "Mozilla/5.0 PHPCrawl/1.0" and "SomeBot (PHPCrawl compatible)"
+  blacklist:
+    - "sqlmap"
+    - "nikto"
+    - "nmap"
+    - "bot"
+    - "crawler"
+    - "python-requests"
+  # whitelist:
+    # - "Googlebot"
+    # - "bingbot"
+
 # ASN Filtering
 # Autonomous System Numbers for network/ISP blocking
 asn:
@@ -21,21 +65,31 @@ asn:
   
   # Whitelist: In "whitelist" mode, only these ASNs are allowed (strict)
   #            In "blacklist" mode, these ASNs are exceptions to the blacklist
+  # Supports two formats:
+  #   1. Simple: just the ASN number (allows all traffic)
+  #   2. Conditional: ASN with required user-agent patterns (more secure)
   whitelist:
-    # - 212238  # Datacamp (ProtonVPN) - example trusted VPN exception
-    # - 7922    # Comcast Cable Communications
-    # - 20115   # Charter Communications
+    # Conditional whitelist - only allow specific user-agents from this VPN ASN
+    - asn: 212238  # Datacamp (ProtonVPN)
+      user_agents:
+        - "Sonarr/*"      # *arr applications only
+        - "Prowlarr/*"
+        - "Lidarr/*"
+        - "Radarr/*"
+    # Simple whitelist - allow all traffic from these ASNs
+    # - 7922   # Comcast Cable Communications
+    # - 20115  # Charter Communications
   
   # Optional: Fetch ASN lists from remote URLs (fetched at startup)
   # Supports remote URLs and local file paths (file:///path or /path)
   # Downloaded lists are cached to /blocklists for 24 hours
   blacklist_urls:
     # Datacenter ASN list (1277+ datacenter/hosting ASNs)
-    # - https://raw.githubusercontent.com/brianhama/bad-asn-list/refs/heads/master/only%20number.txt
-    # Local file examples (place files in ./blocklists/):
+    - https://raw.githubusercontent.com/brianhama/bad-asn-list/refs/heads/master/only%20number.txt
+    # Local file examples (place files in ./geoblock-service/blocklists/):
     # - /blocklists/custom-asn-blacklist.txt
     # - /blocklists/my-datacenter-asns.txt
-  whitelist_urls: []
+  # whitelist_urls:
     # - https://example.com/trusted-asns.txt
     # - file:///app/trusted-asns.txt
   
@@ -43,6 +97,7 @@ asn:
   blacklist:
     # Cloud Providers (from CrowdSec bans)
     - 16509   # AMAZON-02 (AWS)
+    - 14618   # AMAZON-AES (AWS)
     - 8075    # MICROSOFT-CORP-MSN-AS-BLOCK (Azure)
     - 14061   # DIGITALOCEAN-ASN
     
@@ -56,15 +111,8 @@ asn:
     - 398705  # CENSYS-ARIN-02
     
     # Other suspicious ASNs from CrowdSec
-    - 202306  # Hostglobal.plus Ltd (UK - frequent probing)
-    - 135377  # UCLOUD INFORMATION TECHNOLOGY HK LIMITED
-    - 4837    # CHINA UNICOM China169 Backbone
-    - 18403   # FPT Telecom Company (Vietnam)
-    - 17665   # ONEOTT INTERTAINMENT LIMITED (India)
-    # - 212238  # Datacamp (ProtonVPN)
-    - 42821   # K&K Kommunikationssysteme GmbH (Germany)
-    - 680     # Verein zur Foerderung eines Deutschen Forschungsnetzes e.V.
-    - 149658  # Taherpur Online (Bangladesh)
+    - 3356   # LEVEL3 Lumen
+    - 50219 
 
 # Additional Options
 # These can also be overridden by environment variables
@@ -72,3 +120,4 @@ settings:
   allow_lan: true          # Allow private/LAN IPs (192.168.x.x, 10.x.x.x, etc.)
   allow_unknown: true      # Allow if country/ASN cannot be determined
   use_html_response: true  # Return HTML block page (false for JSON response)
+  cache_hours: 168         # Cache duration for remote ASN lists (default: 168 hours = 7 days)
