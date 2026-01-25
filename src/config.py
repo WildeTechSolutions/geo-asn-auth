@@ -6,6 +6,7 @@ Handles loading, parsing, and validating configuration from YAML files.
 import os
 import logging
 import yaml
+import re
 import geoip2.database
 from .blocklist_fetcher import fetch_asn_list
 
@@ -26,11 +27,21 @@ class Config:
         # Load YAML config
         self.raw_config = self._load_yaml_config()
         
+        # Parse settings FIRST (needed by other parsers for cache_hours)
+        settings = self.raw_config.get('settings', {})
+        self.allow_lan = os.getenv('ALLOW_LAN', str(settings.get('allow_lan', True))).lower() == 'true'
+        self.allow_unknown = os.getenv('ALLOW_UNKNOWN', str(settings.get('allow_unknown', True))).lower() == 'true'
+        self.use_html_response = os.getenv('USE_HTML_RESPONSE', str(settings.get('use_html_response', True))).lower() == 'true'
+        self.cache_hours = int(os.getenv('CACHE_HOURS', str(settings.get('cache_hours', 168))))
+        
         # Parse IP configuration
         ip_config = self.raw_config.get('ip', {})
         self.ip_mode = ip_config.get('mode', 'disabled')
         self.ip_whitelist = set(ip_config.get('whitelist', []))
         self.ip_blacklist = set(ip_config.get('blacklist', []))
+        
+        # Parse user-agent configuration (requires cache_hours)
+        self._parse_user_agent_config(self.raw_config.get('user_agent', {}))
         
         # Parse country configuration
         country_config = self.raw_config.get('countries', {})
@@ -57,13 +68,6 @@ class Config:
                 logger.warning(f"Invalid ASN whitelist entry: {entry}")
         
         self.asn_blacklist = set(asn_config.get('blacklist', []))
-        
-        # Parse settings (with environment variable overrides)
-        settings = self.raw_config.get('settings', {})
-        self.allow_lan = os.getenv('ALLOW_LAN', str(settings.get('allow_lan', True))).lower() == 'true'
-        self.allow_unknown = os.getenv('ALLOW_UNKNOWN', str(settings.get('allow_unknown', True))).lower() == 'true'
-        self.use_html_response = os.getenv('USE_HTML_RESPONSE', str(settings.get('use_html_response', True))).lower() == 'true'
-        self.cache_hours = int(os.getenv('CACHE_HOURS', str(settings.get('cache_hours', 168))))
         
         # Fetch and merge remote ASN lists
         self._fetch_remote_asn_lists(asn_config)
@@ -98,6 +102,70 @@ class Config:
         
         logger.warning("No config file found, using empty defaults")
         return {}
+    
+    def _parse_user_agent_config(self, ua_config):
+        """Parse user-agent filtering configuration with regex optimization."""
+        self.user_agent_mode = ua_config.get('mode', 'disabled').lower()
+        
+        if self.user_agent_mode not in ['whitelist', 'blacklist', 'disabled']:
+            logger.warning(f"Invalid user_agent mode '{self.user_agent_mode}', defaulting to 'disabled'")
+            self.user_agent_mode = 'disabled'
+        
+        # Fetch remote user-agent lists
+        remote_whitelist = self._fetch_remote_user_agent_lists(ua_config.get('whitelist_urls', []))
+        remote_blacklist = self._fetch_remote_user_agent_lists(ua_config.get('blacklist_urls', []))
+        
+        # Combine manual and remote entries
+        whitelist_entries = set(ua_config.get('whitelist', [])) | remote_whitelist
+        blacklist_entries = set(ua_config.get('blacklist', [])) | remote_blacklist
+        
+        # Compile regex patterns for efficient substring matching
+        self.user_agent_whitelist_regex = self._compile_user_agent_regex(whitelist_entries)
+        self.user_agent_blacklist_regex = self._compile_user_agent_regex(blacklist_entries)
+        
+        # Store counts for logging/health endpoint
+        self.user_agent_whitelist_count = len(whitelist_entries)
+        self.user_agent_blacklist_count = len(blacklist_entries)
+    
+    def _compile_user_agent_regex(self, patterns):
+        """Compile user-agent patterns into a single optimized regex for substring matching."""
+        if not patterns:
+            return None
+        
+        # Escape special regex characters and join with alternation
+        escaped_patterns = [re.escape(pattern.strip()) for pattern in patterns if pattern.strip()]
+        
+        if not escaped_patterns:
+            return None
+        
+        # Combine into single regex: (pattern1|pattern2|pattern3|...)
+        combined_pattern = '|'.join(escaped_patterns)
+        
+        # Compile with case-insensitive flag for substring matching
+        return re.compile(combined_pattern, re.IGNORECASE)
+    
+    def _fetch_remote_user_agent_lists(self, urls):
+        """Fetch user-agent lists from remote URLs."""
+        if not urls:
+            return set()
+        
+        logger.info(f"Fetching user-agent lists from {len(urls)} source(s)")
+        from .blocklist_fetcher import fetch_text_list
+        all_entries = set()
+        
+        for url in urls:
+            try:
+                entries = fetch_text_list(
+                    url,
+                    cache_hours=self.cache_hours,
+                    list_type='user-agent'
+                )
+                all_entries.update(entries)
+                logger.info(f"Loaded {len(entries)} user-agents from {url}")
+            except Exception as e:
+                logger.error(f"Failed to fetch user-agent list from {url}: {e}")
+        
+        return all_entries
     
     def _fetch_remote_asn_lists(self, asn_config):
         """Fetch and merge remote ASN lists with local lists."""
@@ -178,6 +246,10 @@ class Config:
         logger.info(f"  Country whitelist: {self.country_whitelist}")
         logger.info(f"  Country blacklist: {self.country_blacklist}")
         logger.info(f"  ASN mode: {self.asn_mode}")
+        logger.info(f"  User-Agent mode: {self.user_agent_mode}")
+        if self.user_agent_mode != 'disabled':
+            logger.info(f"  User-Agent whitelist: {self.user_agent_whitelist_count} patterns")
+            logger.info(f"  User-Agent blacklist: {self.user_agent_blacklist_count} patterns")
         logger.info(f"  IP mode: {self.ip_mode}")
         logger.info(f"  IP whitelist: {self.ip_whitelist}")
         logger.info(f"  IP blacklist: {self.ip_blacklist}")

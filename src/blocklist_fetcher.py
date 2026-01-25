@@ -16,6 +16,75 @@ CACHE_DIR = '/blocklists'
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 
+def fetch_text_list(url, cache_hours=168, list_type='text'):
+    """
+    Fetch a text list from URL (one entry per line) with caching.
+    Used for user-agent lists, generic text files, etc.
+    
+    Args:
+        url: URL or local file path
+        cache_hours: Cache duration in hours
+        list_type: Type description for logging (e.g., 'user-agent', 'text')
+    
+    Returns:
+        set: Set of non-empty, stripped lines from the file
+    """
+    cache_dir = "/blocklists"
+    os.makedirs(cache_dir, exist_ok=True)
+    
+    # Generate cache filename based on URL
+    url_hash = hashlib.md5(url.encode()).hexdigest()
+    cache_file = os.path.join(cache_dir, f"{list_type}_{url_hash}.txt")
+    
+    # Check if cached file exists and is fresh
+    if os.path.exists(cache_file):
+        file_age_seconds = time.time() - os.path.getmtime(cache_file)
+        file_age_hours = file_age_seconds / 3600
+        
+        if file_age_hours < cache_hours:
+            logger.info(f"Using cached {list_type} list from {url} (age: {file_age_hours:.1f}h)")
+            with open(cache_file, 'r') as f:
+                entries = {line.strip() for line in f if line.strip() and not line.strip().startswith('#')}
+                return entries
+        else:
+            logger.info(f"Cached {list_type} list from {url} expired (age: {file_age_hours:.1f}h), fetching fresh")
+    
+    # Fetch fresh list
+    try:
+        if url.startswith('file://') or url.startswith('/'):
+            # Local file path
+            local_path = url.replace('file://', '')
+            with open(local_path, 'r') as f:
+                content = f.read()
+        else:
+            # Remote URL
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            content = response.text
+        
+        # Parse entries (one per line, skip empty lines and comments)
+        entries = {line.strip() for line in content.splitlines() if line.strip() and not line.strip().startswith('#')}
+        
+        # Cache the content
+        with open(cache_file, 'w') as f:
+            f.write(content)
+        
+        logger.info(f"Fetched and cached {len(entries)} {list_type} entries from {url}")
+        return entries
+    
+    except Exception as e:
+        logger.error(f"Failed to fetch {list_type} list from {url}: {e}")
+        
+        # Try to use stale cache if available
+        if os.path.exists(cache_file):
+            logger.warning(f"Using stale cached {list_type} list from {url}")
+            with open(cache_file, 'r') as f:
+                entries = {line.strip() for line in f if line.strip() and not line.strip().startswith('#')}
+                return entries
+        
+        return set()
+
+
 def fetch_asn_list(source, timeout=10, cache_hours=168):
     """
     Fetch ASN list from remote URL or local file path.

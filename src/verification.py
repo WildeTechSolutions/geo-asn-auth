@@ -36,6 +36,11 @@ def verify_request(config):
         if ip_result is not None:
             return ip_result
         
+        # Check user-agent whitelist/blacklist if configured
+        ua_result = _check_user_agent(config)
+        if ua_result is not None:
+            return ua_result
+        
         # Check country if configured
         country_result = _check_country(client_ip, config)
         if country_result is not None:
@@ -53,6 +58,49 @@ def verify_request(config):
         logger.error(f"Error processing request: {e}", exc_info=True)
         # Fail open (allow) on errors to prevent service disruption
         return '', 200
+
+
+def _check_user_agent(config):
+    """Check user-agent whitelist/blacklist using compiled regex."""
+    if config.user_agent_mode == 'disabled':
+        return None
+    
+    user_agent = request.headers.get('User-Agent', '')
+    
+    if config.user_agent_mode == 'whitelist':
+        if config.user_agent_whitelist_regex:
+            if config.user_agent_whitelist_regex.search(user_agent):
+                logger.debug(f"User-agent '{user_agent}' matched whitelist")
+                return None  # Allowed
+            else:
+                logger.info(f"Blocked user-agent '{user_agent}' (not in whitelist)")
+                return render_block_page(
+                    "Your user-agent is not authorized.",
+                    get_client_ip(),
+                    use_html_response=config.use_html_response,
+                    block_page_template=config.block_page_template
+                )
+        else:
+            # No whitelist patterns = block all
+            logger.info(f"Blocked user-agent '{user_agent}' (empty whitelist)")
+            return render_block_page(
+                "Your user-agent is not authorized.",
+                get_client_ip(),
+                use_html_response=config.use_html_response,
+                block_page_template=config.block_page_template
+            )
+    
+    elif config.user_agent_mode == 'blacklist':
+        if config.user_agent_blacklist_regex and config.user_agent_blacklist_regex.search(user_agent):
+            logger.info(f"Blocked user-agent '{user_agent}' (matched blacklist pattern)")
+            return render_block_page(
+                "Your user-agent has been blocked.",
+                get_client_ip(),
+                use_html_response=config.use_html_response,
+                block_page_template=config.block_page_template
+            )
+    
+    return None  # Allowed
 
 
 def _check_ip(client_ip, config):
