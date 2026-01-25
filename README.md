@@ -1,74 +1,78 @@
-# geo-asn-auth Service
+# geo-asn-auth
 
-Python-based ForwardAuth service for Traefik that blocks traffic based on country, ASN, and user-agent using MaxMind databases.
+A Flask ForwardAuth service for your reverse proxy that blocks traffic based on country, ASN, and user-agent using MaxMind databases.
 
 [![Docker Image](https://img.shields.io/badge/docker-ghcr.io-blue)](https://ghcr.io)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 ## Quick Start
 
-### Using Pre-built Docker Image
+There are 4 main requirements to run this application.
 
-```bash
-# Pull the image
-docker pull ghcr.io/WildeTechSolutions/geo-asn-auth:latest
-
-# Download MaxMind databases (required)
-# Sign up at https://www.maxmind.com/en/geolite2/signup
-
-# Run the container
-docker run -d \
-  --name geo-asn-auth \
-  -p 9876:9876 \
-  -v /path/to/maxmind:/data:ro \
-  ghcr.io/WildeTechSolutions/geo-asn-auth:latest
-```
+* The `docker-compose.yml` file
+* The `GeoLite2-city.mmdb` and `GeoLite2-ASN.mmdb` maxmind databases
+* A `config.yaml` file
+* Configure your reverse proxy (see [Traefik](#traefik), [Nginx](#nginx), or [Caddy](#caddy) instructions)
 
 ### Using Docker Compose
 
+```yml "docker-compose.yml"
+services:
+  geo-asn-auth:
+    image: ghcr.io/wildetechsolutions/geo-asn-auth:latest
+    # user: "1001:1001"
+    container_name: geo-asn-auth
+    restart: unless-stopped
+    volumes:
+      # Mount MaxMind databases (required) This can be a shared location for other Pangolin services
+      - ./config/maxmind:/data:ro
+      - ./geoblock/config.yaml:/app/config.yaml:ro
+      - ./geoblock/blocklists:/blocklists
+    # environment:
+      # - PORT=9876 # Service port (default: 9876)
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9876/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+```
+
 See [docker-compose.example.yml](docker-compose.example.yml) for a complete example.
 
-## Features
+### Maxmind Database
 
-- **Country-based blocking** (whitelist or blacklist)
-- **ASN-based blocking** (whitelist or blacklist)
-- **User-agent filtering** (blacklist with substring matching)
-- Supports MaxMind GeoLite2 Country and ASN databases
-- Remote blocklist fetching with caching
-- YAML configuration file with inline comments
-- Private IP allowance option
-- Health check endpoint
-- Detailed logging
-- Configurable service port
+If you do not already have the maxmind databases being pulled, then you can add this to your compose stack
 
-## Configuration
+```yml
+  maxmind-updater:
+    image: maxmindinc/geoipupdate:latest
+    container_name: maxmind-updater
+    restart: unless-stopped
+    volumes:
+      - ./config/maxmind:/usr/share/GeoIP
+    environment:
+      - GEOIPUPDATE_ACCOUNT_ID=${MAXMIND_ACCOUNT_ID}
+      - GEOIPUPDATE_LICENSE_KEY=${MAXMIND_LICENSE_KEY}
+      - GEOIPUPDATE_EDITION_IDS=GeoLite2-City GeoLite2-Country GeoLite2-ASN
+      - GEOIPUPDATE_FREQUENCY=24  # Update every 1 days (in hours)
+```
 
-### Quick Start
+### Default Configuration
 
-The service includes a default configuration (`config.yaml.example`) that works out of the box.
+Create `config.yaml` to manage your blocking rules.
 
-**To customize the configuration:**
+In this default `config.yaml`, I have the following policies
 
-1. Copy the example config:
-   ```bash
-   cp config.yaml.example config.yaml
-   ```
+* Country: `Mode: Whitelist` -> Only the allowed countries pass this check.  All else returns 403
+* ASN: `Mode: Blacklist` -> All known datacenter ASNs are blacklisted from provided URL.  
+  - Additional ASNs manually added to blacklist.  
+  - ASNs can be added to the whitelist for exceptions (VPN provider)
+  - ASNs can be added to the whitelist with specific user-agent requirements
+* user-agent: `Mode: Blacklist` -> All known bot user-agents are blacklisted from provided URL
+  - Additional user-agent values added to blakclist
 
-2. Edit `config.yaml` with your custom blocking rules
-
-3. Uncomment the volume mount in `docker-compose.yml`:
-   ```yaml
-   - ./geo-asn-auth/config.yaml:/app/config.yaml:ro
-   ```
-
-4. Restart the service:
-   ```bash
-   docker compose restart geo-asn-auth
-   ```
-
-### Primary Configuration: config.yaml
-
-Edit `config.yaml` to manage your blocking rules:
 
 ```yaml
 # Country Filtering
@@ -87,7 +91,14 @@ asn:
   # - In "whitelist" mode: Only these ASNs are allowed (strict mode)
   # - In "blacklist" mode: These ASNs are exceptions to the blacklist
   whitelist:
-    - 212238  # ProtonVPN - trusted exception to datacenter blacklist
+    - 212238  # ProtonVPN - Fully trust an ASN
+    # Trust an ASN only with specific user_agents
+    - asn: 212238  # Datacamp (ProtonVPN)
+      user_agents:
+        - "Sonarr/*"      # *arr applications only
+        - "Prowlarr/*"
+        - "Lidarr/*"
+        - "Radarr/*"
   
   # Fetch ASN lists from remote URLs (loaded at startup)
   blacklist_urls:
@@ -103,7 +114,7 @@ asn:
 
 # User-Agent Filtering
 user_agent:
-  mode: disabled  # Options: whitelist, blacklist, disabled
+  mode: blacklist  # Options: whitelist, blacklist, disabled
   
   # Fetch user-agent lists from remote URLs (loaded at startup)
   blacklist_urls:
@@ -119,11 +130,26 @@ user_agent:
   whitelist: []
 ```
 
+## Features
+
+- **Country-based blocking** (whitelist or blacklist)
+- **ASN-based blocking** (whitelist or blacklist)
+- **User-agent filtering** (blacklist with substring matching)
+- Supports MaxMind GeoLite2 Country and ASN databases
+- Remote blocklist fetching with caching
+- YAML configuration file with inline comments
+- Private IP allowance option
+- Health check endpoint
+- Detailed logging
+- Configurable service port
+
+## Configuration
+
 **ASN Mode Behavior:**
 - **`whitelist` mode**: Only ASNs in whitelist are allowed (strict deny-by-default)
 - **`blacklist` mode**: ASNs in blacklist are blocked, BUT whitelist entries are exceptions (useful for trusting specific VPNs/services while blocking all other datacenters)
 - **`disabled` mode**: No ASN filtering
-```
+
 
 **Remote ASN Lists:**
 - Lists are fetched at container startup and combined with manual entries
@@ -177,42 +203,28 @@ environment:
 
 **Note**: For ASN blacklist mode, the whitelist acts as an exception list (e.g., trust specific VPNs while blocking all other datacenters).
 
-## Usage
-
-1. **Edit config.yaml** to set your blocking rules
-2. **Rebuild the service**: `docker compose build geo-asn-auth`
-3. **Restart**: `docker compose up -d geo-asn-auth`
-4. **Check status**: `curl http://localhost:9876/health`
-
-## Finding ASNs
-
-Use online tools to find ASNs:
-- https://bgp.he.net/ - Hurricane Electric BGP Toolkit
-- https://ipinfo.io/ - IP to ASN lookup
-- Check CrowdSec bans: `docker exec crowdsec cscli decisions list`
-
 ## MaxMind Database Setup
 
 1. Sign up for free MaxMind account: https://www.maxmind.com/en/geolite2/signup
 2. Download GeoLite2 Country and ASN databases
 3. Place `.mmdb` files in the directory you mount as `/data` in the container
 
-## Traefik Integration
+## Reverse Proxy Integration
 
-This service integrates with Traefik as a ForwardAuth middleware. **Every HTTP request** is processed by geo-asn-auth before reaching your application (Traefik does not cache ForwardAuth responses).
+This service works as a ForwardAuth/External Authentication middleware for reverse proxies. **Every HTTP request** is processed by geo-asn-auth before reaching your application.
 
 ### Request Flow
 
-1. Request arrives at Traefik
-2. **geo-asn-auth middleware** checks IP/user-agent against rules
+1. Request arrives at reverse proxy
+2. **geo-asn-auth** checks IP/user-agent against rules
 3. If blocked: Returns 403 (request stops)
-4. If allowed: Returns 200 (request continues to CrowdSec and application)
+4. If allowed: Returns 200 (request continues to application)
 
-### Configuring Traefik
+---
 
-**IMPORTANT**: You must configure Traefik to use geo-asn-auth as a middleware. This requires editing both Traefik configuration files.
+## Traefik
 
-#### Step 1: Define the ForwardAuth middleware
+### Step 1: Define the ForwardAuth middleware
 
 Edit your Traefik dynamic configuration file (e.g., `dynamic_config.yml`):
 
@@ -221,7 +233,7 @@ http:
   middlewares:
     geoblock:
       forwardAuth:
-        address: http://geoblock-service:9876/verify
+        address: http://geo-asn-auth:9876/verify
         trustForwardHeader: true
         authResponseHeaders:
           - X-Geo-Country
@@ -233,7 +245,7 @@ http:
 - `trustForwardHeader`: Required to read `X-Forwarded-For` header
 - `authResponseHeaders`: Optional headers passed to your application
 
-#### Step 2: Apply middleware globally or per-route
+### Step 2: Apply middleware globally or per-route
 
 **Option A: Global (All Routes)**
 
@@ -246,20 +258,18 @@ entryPoints:
     http:
       middlewares:
         - geoblock@file
-        - crowdsec@file
   websecure:
     address: :443
     http:
       middlewares:
         - geoblock@file
-        - crowdsec@file
 ```
 
 This applies geo-asn-auth to **all HTTP/HTTPS traffic** at the entry point level.
 
 **Option B: Per-Route**
 
-Edit your dynamic configuration file to apply middleware only to specific routers:
+Edit your dynamic configuration file:
 
 ```yaml
 http:
@@ -276,31 +286,211 @@ http:
         certResolver: letsencrypt
 ```
 
-**Middleware order matters**: Place `geoblock` **before** CrowdSec to block traffic early.
-
-#### Step 3: Restart Traefik
+### Step 3: Restart Traefik
 
 ```bash
 docker compose restart traefik
 ```
 
-Traefik will reload the configuration and start sending requests to geo-asn-auth.
-
 ### Verifying Integration
 
-Check Traefik logs to confirm ForwardAuth is working:
+Check Traefik logs:
 
 ```bash
 docker logs traefik | grep -i forward
 ```
 
-Check geo-asn-auth logs for request processing:
+Check geo-asn-auth logs:
 
 ```bash
 docker logs geo-asn-auth
 ```
 
-You should see log entries for each request showing allowed/blocked decisions.
+---
+
+## Nginx
+
+### Global Configuration (All Requests)
+
+Edit your main Nginx configuration (e.g., `/etc/nginx/nginx.conf`):
+
+```nginx
+http {
+    # Apply auth_request globally to all server blocks
+    auth_request /auth;
+    auth_request_set $auth_status $upstream_status;
+    
+    # Define the auth endpoint once
+    location = /auth {
+        internal;
+        proxy_pass http://geo-asn-auth:9876/verify;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Original-URI $request_uri;
+    }
+    
+    # All server blocks now inherit auth_request automatically
+    server {
+        listen 80;
+        server_name example.com;
+        
+        location / {
+            proxy_pass http://backend:8080;
+        }
+    }
+}
+```
+
+### Per-Server Configuration
+
+If you only want to protect specific sites, place `auth_request` in individual server blocks:
+
+```nginx
+http {
+    # Define auth endpoint in http block (shared)
+    location = /auth {
+        internal;
+        proxy_pass http://geo-asn-auth:9876/verify;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header X-Forwarded-For $remote_addr;
+    }
+
+    # Protected server
+    server {
+        listen 80;
+        server_name protected.com;
+        
+        auth_request /auth;  # Enable for this server only
+        auth_request_set $auth_status $upstream_status;
+        
+        location / {
+            proxy_pass http://backend:8080;
+        }
+    }
+    
+    # Unprotected server
+    server {
+        listen 80;
+        server_name public.com;
+        # No auth_request - this site is not protected
+        
+        location / {
+            proxy_pass http://other-backend:8080;
+        }
+    }
+}
+```
+
+### Disable for Specific Locations
+
+Override globally-applied auth for specific paths:
+
+```nginx
+server {
+    listen 80;
+    server_name example.com;
+    
+    location / {
+        # Inherits global auth_request
+        proxy_pass http://backend:8080;
+    }
+    
+    location /public {
+        auth_request off;  # Disable auth for this path
+        proxy_pass http://backend:8080;
+    }
+}
+```
+
+### Reload Nginx
+
+```bash
+nginx -t  # Test configuration
+nginx -s reload  # Or: docker exec nginx nginx -s reload
+```
+
+---
+
+## Caddy
+
+### Global Configuration (All Sites)
+
+Using a reusable snippet in your Caddyfile:
+
+```caddyfile
+# Define reusable snippet
+(geoblock) {
+    forward_auth geo-asn-auth:9876 {
+        uri /verify
+        copy_headers X-Geo-Country X-Geo-ASN
+    }
+}
+
+# Apply to all sites
+*.example.com {
+    import geoblock
+    reverse_proxy backend:8080
+}
+
+other-site.com {
+    import geoblock
+    reverse_proxy other-backend:8080
+}
+```
+
+### Wildcard Global Application
+
+Apply to all traffic using a catch-all:
+
+```caddyfile
+:80, :443 {
+    forward_auth geo-asn-auth:9876 {
+        uri /verify
+        copy_headers X-Geo-Country X-Geo-ASN
+    }
+    
+    @site1 host site1.com
+    handle @site1 {
+        reverse_proxy backend1:8080
+    }
+    
+    @site2 host site2.com
+    handle @site2 {
+        reverse_proxy backend2:8080
+    }
+}
+```
+
+### Per-Site Configuration
+
+Apply only to specific sites:
+
+```caddyfile
+# Protected site
+protected.com {
+    forward_auth geo-asn-auth:9876 {
+        uri /verify
+        copy_headers X-Geo-Country X-Geo-ASN
+    }
+    reverse_proxy backend:8080
+}
+
+# Unprotected site
+public.com {
+    # No forward_auth - not protected
+    reverse_proxy other-backend:8080
+}
+```
+
+### Reload Caddy
+
+```bash
+caddy reload  # Or: docker exec caddy caddy reload
+```
+
+---
 
 ## Endpoints
 
@@ -319,68 +509,6 @@ Test from specific IP (for testing, temporarily expose port):
 curl -H "X-Forwarded-For: 8.8.8.8" http://localhost:9876/verify
 ```
 
-## Performance
-
-Typical request processing time:
-- GeoIP lookup: ~0.1ms
-- ASN/Country set lookups: ~0.01ms
-- User-agent regex matching: ~0.3-0.5ms (with ~4000 patterns)
-- **Total**: <1ms per request
-
-Network latency between Traefik and geo-asn-auth adds ~0.1ms (when running as sidecar containers).
-
-## Development
-
-### User Permissions
-
-The container runs as a non-root user (`appuser`) for security. By default, it uses UID/GID `1000`, but you can customize this to match your host user:
-
-```bash
-# Check your user's UID/GID
-id -u  # Your UID
-id -g  # Your GID
-```
-
-**Option 1: Build with custom UID/GID** (recommended for building locally):
-```yaml
-# docker-compose.yml
-services:
-  geo-asn-auth:
-    build:
-      context: ./geo-asn-auth
-      args:
-        USER_UID: 1000  # Your UID
-        USER_GID: 1000  # Your GID
-```
-
-**Option 2: Override user at runtime** (when using pre-built images):
-```yaml
-# docker-compose.yml
-services:
-  geo-asn-auth:
-    image: ghcr.io/user/geo-asn-auth:latest
-    user: "1000:1000"  # Your UID:GID
-```
-
-This ensures the container user can write to the `/blocklists` volume mount.
-
-### Building Locally
-
-```bash
-# Build with default UID/GID (1000:1000)
-docker build -t geo-asn-auth:latest .
-
-# Or build with custom UID/GID
-docker build --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) \
-  -t geo-asn-auth:latest .
-
-# Run locally
-docker run -d -p 9876:9876 \
-  -v /path/to/maxmind:/data:ro \
-  -v ./blocklists:/blocklists \
-  geo-asn-auth:latest
-```
-
 ## MaxMind Database Setup
 
 This service requires MaxMind GeoLite2 databases:
@@ -397,28 +525,12 @@ Use the `maxmind-geoipupdate` container to keep databases current.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-Contributions welcome! Please open an issue or submit a pull request.
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
 ## Support
 
 - Report issues: https://github.com/WildeTechSolutions/geo-asn-auth/issues
 - Questions: https://github.com/WildeTechSolutions/geo-asn-auth/discussions
-
-## Common ASN Numbers
-
-- 13335 - Cloudflare
-- 15169 - Google
-- 16509 - Amazon AWS
-- 8075 - Microsoft Azure
-- 14061 - DigitalOcean
-- 209 - Qwest/CenturyLink
-- 7922 - Comcast
-
-Find ASN: https://bgp.he.net/
 
 ## Logs
 

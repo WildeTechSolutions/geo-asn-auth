@@ -1,7 +1,10 @@
 services:
   geo-asn-auth:
     image: ghcr.io/wildetechsolutions/geo-asn-auth:latest
-    # Or build locally:
+    # Override container user to match your host user for proper file permissions
+    # Uncomment and set to your UID:GID (run `id -u` and `id -g` to find yours)
+    # user: "1001:1001"
+    # Or build locally with custom UID/GID baked into the image:
     # build:
     #   context: .
     #   args:
@@ -14,24 +17,20 @@ services:
       - ./config/maxmind:/data:ro
       # Mount custom config (optional - uses bundled config.yaml.example if not provided)
       # Create config.yaml from config.yaml.example and uncomment to customize:
-      - ./geoblock/config.yaml:/app/config.yaml:ro
+      # - ./geoblock/config.yaml:/app/config.yaml:ro
       # Mount blocklists directory for caching and custom ASN lists
       - ./geoblock/blocklists:/blocklists
-    environment:
-      # Service port
-      - PORT=9876
-      
-      # Config file path (inside container)
-      - CONFIG_PATH=/app/config.yaml
-      
-      # Database paths (inside container)
-      - COUNTRY_DB_PATH=/data/GeoLite2-Country.mmdb
-      - ASN_DB_PATH=/data/GeoLite2-ASN.mmdb
-      
-      # Optional overrides (uncomment to override config.yaml settings)
-      # - ALLOW_LAN=true
-      # - ALLOW_UNKNOWN=true
-      # - USE_HTML_RESPONSE=false  # Set to false for JSON responses instead of HTML
+    # All environment variables are optional - defaults shown below
+    # Uncomment and modify only if you need to override defaults
+    # environment:
+      # - PORT=9876                                  # Service port (default: 9876)
+      # - CONFIG_PATH=/app/config.yaml               # Config file path (default: /app/config.yaml)
+      # - COUNTRY_DB_PATH=/data/GeoLite2-Country.mmdb  # Country database (default: /data/GeoLite2-Country.mmdb)
+      # - ASN_DB_PATH=/data/GeoLite2-ASN.mmdb        # ASN database (default: /data/GeoLite2-ASN.mmdb)
+      # - CACHE_HOURS=168                            # Blocklist cache duration in hours (default: 168 = 7 days)
+      # - ALLOW_LAN=true                             # Allow private/LAN IPs (default: true)
+      # - ALLOW_UNKNOWN=true                         # Allow when geo data unavailable (default: true)
+      # - USE_HTML_RESPONSE=true                     # Use HTML for blocked pages (default: true, set to false for JSON)
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9876/health')"]
       interval: 30s
