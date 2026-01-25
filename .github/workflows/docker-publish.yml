@@ -12,9 +12,9 @@ on:
 
 env:
   # GitHub Container Registry
-  GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/traefik-geoblock-forwardauth
+  GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/geo-asn-auth
   # Docker Hub (uncomment and set your username)
-  DOCKERHUB_IMAGE: WildeTechSolutions/traefik-geoblock-forwardauth
+  # DOCKERHUB_IMAGE: ${{ github.repository_owner }}/geo-asn-auth
 
 jobs:
   build-and-push:
@@ -68,5 +68,8 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            USER_UID=1001
+            USER_GID=1001
           cache-from: type=gha
           cache-to: type=gha,mode=max
