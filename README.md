@@ -11,7 +11,7 @@ Python-based ForwardAuth service for Traefik that blocks traffic based on countr
 
 ```bash
 # Pull the image
-docker pull ghcr.io/your-username/traefik-geoblock-forwardauth:latest
+docker pull ghcr.io/WildeTechSolutions/traefik-geoblock-forwardauth:latest
 
 # Download MaxMind databases (required)
 # Sign up at https://www.maxmind.com/en/geolite2/signup
@@ -21,7 +21,7 @@ docker run -d \
   --name geoblock-service \
   -p 9876:9876 \
   -v /path/to/maxmind:/data:ro \
-  ghcr.io/your-username/traefik-geoblock-forwardauth:latest
+  ghcr.io/WildeTechSolutions/traefik-geoblock-forwardauth:latest
 ```
 
 ### Using Docker Compose
@@ -262,7 +262,7 @@ This repository includes a GitHub Actions workflow that automatically builds and
 **Setup:**
 1. Push code to GitHub
 2. Create a release tag: `git tag v1.0.0 && git push --tags`
-3. GitHub Actions will automatically build and push to `ghcr.io/your-username/traefik-geoblock-forwardauth`
+3. GitHub Actions will automatically build and push to `ghcr.io/WildeTechSolutions/traefik-geoblock-forwardauth`
 
 **Note:** GHCR uses your GitHub token automatically - no additional secrets needed!
 
@@ -313,8 +313,8 @@ Contributions welcome! Please open an issue or submit a pull request.
 
 ## Support
 
-- Report issues: https://github.com/your-username/traefik-geoblock-forwardauth/issues
-- Questions: https://github.com/your-username/traefik-geoblock-forwardauth/discussions
+- Report issues: https://github.com/WildeTechSolutions/traefik-geoblock-forwardauth/issues
+- Questions: https://github.com/WildeTechSolutions/traefik-geoblock-forwardauth/discussions
 
 ## Common ASN Numbers
 
