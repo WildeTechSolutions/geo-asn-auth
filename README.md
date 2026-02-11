@@ -89,15 +89,15 @@ asn:
   # Whitelist can be used in two ways:
   # - In "whitelist" mode: Only these ASNs are allowed (strict mode)
   # - In "blacklist" mode: These ASNs are exceptions to the blacklist
-  whitelist:
-    - 212238  # ProtonVPN - Fully trust an ASN
-    # Trust an ASN only with specific user_agents
-    - asn: 212238  # Datacamp (ProtonVPN)
-      user_agents:
-        - "Sonarr/*"      # *arr applications only
-        - "Prowlarr/*"
-        - "Lidarr/*"
-        - "Radarr/*"
+  # whitelist:
+  #   - 212238  # ProtonVPN - Fully trust an ASN
+  #   # Trust an ASN only with specific user_agents
+  #   - asn: 212238  # Datacamp (ProtonVPN)
+  #     user_agents:
+  #       - "Sonarr/*"      # *arr applications only
+  #       - "Prowlarr/*"
+  #       - "Lidarr/*"
+  #       - "Radarr/*"
   
   # Fetch ASN lists from remote URLs (loaded at startup)
   blacklist_urls:
@@ -151,6 +151,10 @@ user_agent:
 - Health check endpoint
 - Detailed logging
 - Configurable service port
+
+![Screenshot](docs/images/country-block.png)
+
+![Screenshot](docs/images/asn-block.png)
 
 ## Configuration
 
