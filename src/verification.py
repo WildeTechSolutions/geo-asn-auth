@@ -267,7 +267,7 @@ def _check_asn(client_ip, config):
                     else:
                         logger.info(f"Blocked IP {client_ip} from ASN {asn_number} (whitelisted but user-agent '{user_agent}' doesn't match required patterns: {user_agent_patterns})")
                         return render_block_page(
-                            f"Access from your network (AS{asn_number}) requires authorized application.",
+                            f"Access from your network (AS{asn_number}) is not permitted.",
                             client_ip,
                             asn=f"AS{asn_number} - {asn_org}",
                             use_html_response=config.use_html_response,
