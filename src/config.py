@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration paths
 CONFIG_PATH = os.getenv('CONFIG_PATH', '/app/config.yaml')
-CONFIG_EXAMPLE_PATH = '/app/config.yaml.example'
+CONFIG_EXAMPLE_PATH = '/app/config.example.yaml'
 COUNTRY_DB_PATH = os.getenv('COUNTRY_DB_PATH', '/data/GeoLite2-Country.mmdb')
 ASN_DB_PATH = os.getenv('ASN_DB_PATH', '/data/GeoLite2-ASN.mmdb')
 
@@ -78,12 +78,187 @@ class Config:
         # Validate configuration
         self._validate_config()
         
+        # Parse domain-specific configurations
+        self.domain_configs = {}
+        domains = self.raw_config.get('domains', {})
+        if domains:
+            logger.info(f"Parsing {len(domains)} domain-specific configuration(s)")
+            for domain, domain_config in domains.items():
+                try:
+                    self.domain_configs[domain.lower()] = self._parse_domain_config(domain, domain_config)
+                    logger.info(f"Loaded configuration for domain: {domain}")
+                except Exception as e:
+                    logger.error(f"Failed to parse domain config for {domain}: {e}")
+        
         # Load GeoIP databases
         self.country_reader = self._load_country_db()
         self.asn_reader = self._load_asn_db()
         
         # Log configuration
         self._log_config()
+    
+    def _parse_domain_config(self, domain, domain_config):
+        """
+        Parse domain-specific configuration.
+        
+        Returns a dict with overrides and whether to extend (merge) or replace.
+        """
+        parsed = {
+            '_domain': domain,
+            'extend_global': domain_config.get('extend_global', False),
+            'overrides': {}
+        }
+        
+        # Parse each section if present
+        for section in ['ip', 'countries', 'asn', 'user_agent', 'settings']:
+            if section in domain_config and section != 'extend_global':
+                parsed['overrides'][section] = domain_config[section]
+        
+        return parsed
+    
+    def get_config_for_domain(self, host):
+        """
+        Get configuration for a specific domain with overrides applied.
+        
+        Args:
+            host: The Host header value (e.g., "api.example.com" or "api.example.com:443")
+        
+        Returns:
+            Config object (either a new merged config or self if no domain match)
+        """
+        if not host:
+            return self
+        
+        # Strip port if present
+        host = host.split(':')[0].lower()
+        
+        # Exact match first
+        if host in self.domain_configs:
+            return self._create_domain_config(self.domain_configs[host])
+        
+        # Check for wildcard matches (*.example.com)
+        for domain_pattern, domain_config in self.domain_configs.items():
+            if '*' in domain_pattern and fnmatch.fnmatch(host, domain_pattern):
+                logger.debug(f"Domain '{host}' matched pattern '{domain_pattern}'")
+                return self._create_domain_config(domain_config)
+        
+        # No match, return global config
+        return self
+    
+    def _create_domain_config(self, domain_config):
+        """
+        Create a new Config object with domain-specific overrides applied.
+        
+        Args:
+            domain_config: Parsed domain configuration dict
+        
+        Returns:
+            New Config object with merged configuration
+        """
+        # Create a shallow copy of self
+        domain_obj = object.__new__(Config)
+        
+        # Copy all attributes from global config
+        for attr, value in self.__dict__.items():
+            if not attr.startswith('domain_configs'):
+                setattr(domain_obj, attr, value)
+        
+        # Apply overrides based on extend strategy
+        is_extend = domain_config.get('extend_global', False)
+        overrides = domain_config.get('overrides', {})
+        
+        # Apply IP overrides
+        if 'ip' in overrides:
+            ip_config = overrides['ip']
+            if not is_extend or 'mode' in ip_config:
+                domain_obj.ip_mode = ip_config.get('mode', self.ip_mode)
+            if is_extend:
+                # Extend: merge lists
+                domain_obj.ip_whitelist = self.ip_whitelist | set(ip_config.get('whitelist', []))
+                domain_obj.ip_blacklist = self.ip_blacklist | set(ip_config.get('blacklist', []))
+            else:
+                # Replace: use only domain config
+                domain_obj.ip_whitelist = set(ip_config.get('whitelist', []))
+                domain_obj.ip_blacklist = set(ip_config.get('blacklist', []))
+        
+        # Apply country overrides
+        if 'countries' in overrides:
+            country_config = overrides['countries']
+            if not is_extend or 'mode' in country_config:
+                domain_obj.country_mode = country_config.get('mode', self.country_mode)
+            if is_extend:
+                # Extend: merge lists
+                domain_obj.country_whitelist = list(set(self.country_whitelist) | 
+                                                   set(c.upper() for c in country_config.get('whitelist', [])))
+                domain_obj.country_blacklist = list(set(self.country_blacklist) | 
+                                                   set(c.upper() for c in country_config.get('blacklist', [])))
+            else:
+                # Replace: use only domain config
+                domain_obj.country_whitelist = [c.upper() for c in country_config.get('whitelist', [])]
+                domain_obj.country_blacklist = [c.upper() for c in country_config.get('blacklist', [])]
+        
+        # Apply ASN overrides
+        if 'asn' in overrides:
+            asn_config = overrides['asn']
+            if not is_extend or 'mode' in asn_config:
+                domain_obj.asn_mode = asn_config.get('mode', self.asn_mode)
+            
+            if is_extend:
+                # Extend: merge lists
+                domain_obj.asn_whitelist = dict(self.asn_whitelist)
+                for entry in asn_config.get('whitelist', []):
+                    if isinstance(entry, int):
+                        domain_obj.asn_whitelist[entry] = None
+                    elif isinstance(entry, dict) and 'asn' in entry:
+                        asn = entry['asn']
+                        user_agents = entry.get('user_agents', [])
+                        domain_obj.asn_whitelist[asn] = user_agents if user_agents else None
+                
+                domain_obj.asn_blacklist = self.asn_blacklist | set(asn_config.get('blacklist', []))
+            else:
+                # Replace: use only domain config
+                domain_obj.asn_whitelist = {}
+                for entry in asn_config.get('whitelist', []):
+                    if isinstance(entry, int):
+                        domain_obj.asn_whitelist[entry] = None
+                    elif isinstance(entry, dict) and 'asn' in entry:
+                        asn = entry['asn']
+                        user_agents = entry.get('user_agents', [])
+                        domain_obj.asn_whitelist[asn] = user_agents if user_agents else None
+                
+                domain_obj.asn_blacklist = set(asn_config.get('blacklist', []))
+        
+        # Apply user_agent overrides
+        if 'user_agent' in overrides:
+            ua_config = overrides['user_agent']
+            if not is_extend or 'mode' in ua_config:
+                domain_obj.user_agent_mode = ua_config.get('mode', self.user_agent_mode)
+            
+            # For user-agent, we don't re-compile regexes for domains (performance reasons)
+            # Users should use extend mode sparingly or accept global patterns
+            if not is_extend:
+                # Replace mode: recompile with domain-specific patterns only
+                whitelist_entries = set(ua_config.get('whitelist', []))
+                blacklist_entries = set(ua_config.get('blacklist', []))
+                
+                domain_obj.user_agent_whitelist_regex = self._compile_user_agent_regex(whitelist_entries)
+                domain_obj.user_agent_blacklist_regex = self._compile_user_agent_regex(blacklist_entries)
+                domain_obj.user_agent_whitelist_count = len(whitelist_entries)
+                domain_obj.user_agent_blacklist_count = len(blacklist_entries)
+            # Note: extend mode keeps global regex patterns (no merge for performance)
+        
+        # Apply settings overrides
+        if 'settings' in overrides:
+            settings = overrides['settings']
+            if 'allow_lan' in settings:
+                domain_obj.allow_lan = settings['allow_lan']
+            if 'allow_unknown' in settings:
+                domain_obj.allow_unknown = settings['allow_unknown']
+            if 'use_html_response' in settings:
+                domain_obj.use_html_response = settings['use_html_response']
+        
+        logger.debug(f"Created domain config for '{domain_config.get('_domain', 'unknown')}'")
+        return domain_obj
     
     def _load_yaml_config(self):
         """Load configuration from YAML file."""
@@ -258,3 +433,7 @@ class Config:
         logger.info(f"  ASN blacklist: {self.asn_blacklist}")
         logger.info(f"  ALLOW_LAN: {self.allow_lan}")
         logger.info(f"  ALLOW_UNKNOWN: {self.allow_unknown}")
+        if self.domain_configs:
+            logger.info(f"  Domain-specific configs: {len(self.domain_configs)} domain(s)")
+            for domain in self.domain_configs.keys():
+                logger.info(f"    - {domain}")

@@ -27,7 +27,6 @@ services:
       # Mount MaxMind databases (required) This can be a shared location for other Pangolin services
       - ./config/maxmind:/data:ro
       - ./geoblock/config.yaml:/app/config.yaml:ro
-      - ./geoblock/blocklists:/blocklists
     # environment:
       # - PORT=9876 # Service port (default: 9876)
 
@@ -178,6 +177,75 @@ echo "67890" >> ./geo-asn-auth/blocklists/my-custom-asns.txt
 blacklist_urls:
   - /blocklists/my-custom-asns.txt  # Local file
   - https://raw.githubusercontent.com/brianhama/bad-asn-list/refs/heads/master/only%20number.txt  # Remote (cached)
+```
+
+### Domain-Specific Overrides
+
+You can override global settings for specific domains by adding a `domains:` section to your `config.yaml`. This is useful when different sites/APIs need different protection rules.
+
+**Matching**: Domains are matched against the `Host` header. Supports exact matches and wildcards (`*.example.com`).
+
+**Three Override Strategies:**
+
+1. **REPLACE** (default) - Ignore global config, use only domain-specific settings
+2. **PARTIAL OVERRIDE** - Override specific sections, inherit others
+3. **EXTEND** - Merge with global config using `extend_global: true`
+
+**Example: Admin Panel with IP Whitelist Only**
+```yaml
+domains:
+  admin.example.com:
+    ip:
+      mode: whitelist
+      whitelist:
+        - "192.168.1.100"  # Office IP
+        - "10.0.0.50"      # VPN IP
+    countries:
+      mode: disabled  # Don't check country
+    asn:
+      mode: disabled
+    user_agent:
+      mode: disabled
+    settings:
+      allow_lan: false  # Strict IP matching only
+```
+
+**Example: API with Different Country Rules**
+```yaml
+domains:
+  api.example.com:
+    countries:
+      mode: blacklist  # Override just the country mode
+      blacklist:
+        - CN  # Block China
+        - RU  # Block Russia
+    # ASN and user_agent inherit from global config
+```
+
+**Example: Domain with Additional VPN Exceptions**
+```yaml
+domains:
+  vpn-allowed.example.com:
+    extend_global: true  # Merge instead of replace
+    asn:
+      whitelist:
+        - 212238  # Add ProtonVPN to global whitelist
+        - 9009    # Add another VPN
+    # All other global settings still apply
+```
+
+**Example: Wildcard for All Subdomains**
+```yaml
+domains:
+  *.internal.example.com:
+    ip:
+      mode: whitelist
+      whitelist:
+        - "10.0.0.0/8"  # Internal network only
+    countries:
+      mode: disabled
+    asn:
+      mode: disabled
 ```
 
 ### Environment Variables (docker-compose.yml)
@@ -509,18 +577,6 @@ Test from specific IP (for testing, temporarily expose port):
 curl -H "X-Forwarded-For: 8.8.8.8" http://localhost:9876/verify
 ```
 
-## MaxMind Database Setup
-
-This service requires MaxMind GeoLite2 databases:
-
-1. Sign up for a free account: https://www.maxmind.com/en/geolite2/signup
-2. Generate a license key
-3. Download databases:
-   - GeoLite2-Country.mmdb
-   - GeoLite2-ASN.mmdb
-4. Place in a directory and mount as `/data` in the container
-
-**Automated Updates:**
 Use the `maxmind-geoipupdate` container to keep databases current.
 
 ## License

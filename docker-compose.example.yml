@@ -15,8 +15,8 @@ services:
     volumes:
       # Mount MaxMind databases (required) This can be a shared location for other Pangolin services
       - ./config/maxmind:/data:ro
-      # Mount custom config (optional - uses bundled config.yaml.example if not provided)
-      # Create config.yaml from config.yaml.example and uncomment to customize:
+      # Mount custom config (optional - uses bundled config.example.yaml if not provided)
+      # Create config.yaml from config.example.yaml and uncomment to customize:
       # - ./geoblock/config.yaml:/app/config.yaml:ro
       # Mount blocklists directory for caching and custom ASN lists
       - ./geoblock/blocklists:/blocklists

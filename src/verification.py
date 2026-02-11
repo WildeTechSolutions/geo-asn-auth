@@ -24,30 +24,51 @@ def verify_request(config):
         - (error_response, 403) for blocked requests
     """
     try:
+        # Log all headers for debugging
+        logger.info(f"Request headers: Host={request.headers.get('Host')}, "
+                   f"X-Forwarded-Host={request.headers.get('X-Forwarded-Host')}, "
+                   f"X-Forwarded-For={request.headers.get('X-Forwarded-For')}, "
+                   f"X-Real-IP={request.headers.get('X-Real-IP')}")
+        
+        # Get domain-specific configuration if available
+        # Prefer X-Forwarded-Host (from reverse proxy) over Host header
+        host = request.headers.get('X-Forwarded-Host') or request.headers.get('Host', '')
+        
+        # Log the host header for debugging
+        logger.info(f"Using Host value: '{host}'")
+        
+        domain_config = config.get_config_for_domain(host)
+        
+        if domain_config is not config:
+            logger.info(f"✓ Using domain-specific config for: {host}")
+        else:
+            logger.info(f"Using global config (no domain match for: {host})")
+        
         client_ip = get_client_ip()
         
-        # Allow private IPs if configured
-        if config.allow_lan and is_private_ip(client_ip):
-            logger.debug(f"Allowing private IP: {client_ip}")
-            return '', 200
-        
-        # Check IP whitelist/blacklist if configured
-        ip_result = _check_ip(client_ip, config)
+        # Check IP whitelist/blacklist FIRST (before allow_lan bypass)
+        # This ensures domain-specific IP whitelists work correctly
+        ip_result = _check_ip(client_ip, domain_config)
         if ip_result is not None:
             return ip_result
         
+        # Allow private IPs if configured (after IP whitelist/blacklist check)
+        if domain_config.allow_lan and is_private_ip(client_ip):
+            logger.debug(f"Allowing private IP: {client_ip}")
+            return '', 200
+        
         # Check user-agent whitelist/blacklist if configured
-        ua_result = _check_user_agent(config)
+        ua_result = _check_user_agent(domain_config)
         if ua_result is not None:
             return ua_result
         
         # Check country if configured
-        country_result = _check_country(client_ip, config)
+        country_result = _check_country(client_ip, domain_config)
         if country_result is not None:
             return country_result
         
         # Check ASN if configured
-        asn_result = _check_asn(client_ip, config)
+        asn_result = _check_asn(client_ip, domain_config)
         if asn_result is not None:
             return asn_result
         
@@ -111,10 +132,11 @@ def _check_ip(client_ip, config):
         Response tuple if request should be blocked/allowed, None to continue checks
     """
     if config.ip_mode == 'disabled':
+        logger.info(f"IP check skipped (mode=disabled)")
         return None
     
-    logger.debug(f"IP check: mode={config.ip_mode}, client_ip={client_ip}, "
-                f"whitelist={config.ip_whitelist}, in_whitelist={client_ip in config.ip_whitelist}")
+    logger.info(f"IP check: mode={config.ip_mode}, client_ip={client_ip}, "
+                f"whitelist={config.ip_whitelist}, blacklist={config.ip_blacklist}")
     
     # In blacklist mode: whitelist = bypass all checks, blacklist = immediate block
     if config.ip_mode == 'blacklist':
@@ -135,7 +157,15 @@ def _check_ip(client_ip, config):
         if config.ip_whitelist and client_ip in config.ip_whitelist:
             logger.info(f"Allowing IP {client_ip} (in IP whitelist)")
             return '', 200
-        # Not in whitelist - continue to country/ASN checks
+        else:
+            # IP not in whitelist - BLOCK
+            logger.info(f"Blocked IP {client_ip} (not in IP whitelist)")
+            return render_block_page(
+                "Your IP address is not authorized.",
+                client_ip,
+                use_html_response=config.use_html_response,
+                block_page_template=config.block_page_template
+            )
     
     return None
 

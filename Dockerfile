@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application
 COPY src/ ./src/
 COPY block_page.html .
-COPY config.yaml.example /app/config.yaml.example
+COPY config.example.yaml /app/config.example.yaml
 COPY gunicorn_config.py .
 
 # Create blocklists directory

@@ -121,3 +121,56 @@ settings:
   allow_unknown: true      # Allow if country/ASN cannot be determined
   use_html_response: true  # Return HTML block page (false for JSON response)
   cache_hours: 168         # Cache duration for remote ASN lists (default: 168 hours = 7 days)
+
+# Domain-Specific Configuration Overrides
+# Override global settings for specific domains (matched against Host header)
+# Supports exact matches and wildcards (*.example.com)
+#
+# domains:
+#   # Strategy 1: REPLACE - Ignore global config, use only domain-specific settings
+#   # Useful for admin panels or internal tools with strict IP restrictions
+#   admin.example.com:
+#     ip:
+#       mode: whitelist
+#       whitelist:
+#         - "192.168.1.100"  # Office IP only
+#         - "10.0.0.50"      # VPN IP
+#     countries:
+#       mode: disabled  # Don't check country for admin
+#     asn:
+#       mode: disabled
+#     user_agent:
+#       mode: disabled
+#     settings:
+#       allow_lan: false  # Strict IP matching only
+#   
+#   # Strategy 2: PARTIAL OVERRIDE - Override specific sections, inherit others
+#   # Useful for public APIs with different country restrictions
+#   api.example.com:
+#     countries:
+#       mode: blacklist  # Override just the country mode
+#       blacklist:
+#         - CN  # Block China
+#         - RU  # Block Russia
+#     # ASN and user_agent inherit from global config
+#   
+#   # Strategy 3: EXTEND - Merge with global config (add to existing lists)
+#   # Useful for domains that need additional exceptions
+#   vpn-allowed.example.com:
+#     extend_global: true  # Special flag: merge instead of replace
+#     asn:
+#       whitelist:
+#         - 212238  # Add ProtonVPN to global whitelist
+#         - 9009    # Add another VPN provider
+#     # All other global settings still apply
+#   
+#   # Wildcard example: Apply to all subdomains
+#   *.internal.example.com:
+#     ip:
+#       mode: whitelist
+#       whitelist:
+#         - "10.0.0.0/8"     # Internal network only
+#     countries:
+#       mode: disabled
+#     asn:
+#       mode: disabled
