@@ -126,7 +126,17 @@ user_agent:
     - "sqlmap"
     - "nikto"
     - "nmap"
+    - "bot"
+    - "crawler"
+    - "python-requests"
   whitelist: []
+
+# domains:
+#   integration-api.example.com:
+#     ip:
+#       mode: whitelist
+#       whitelist:
+#         - "192.168.1.100"  # Home IP Only
 ```
 
 ## Features
